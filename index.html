@@ -66,6 +66,9 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2
 .sold{opacity:.45}
 .sold .nm{text-decoration:line-through}
 .pcard .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.tgt{margin-left:auto;font-size:24px;opacity:.3;filter:grayscale(1);padding:2px 6px;border-radius:8px}
+.tgt.on{opacity:1;filter:none;background:var(--surface2)}
+.tabbar button{font-size:12px}
 .pcard .head .n{font-size:26px;font-weight:800;text-wrap:balance}
 .metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:14px 0}
 .metric{background:var(--surface2);border-radius:10px;padding:10px;text-align:center}
@@ -124,6 +127,7 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2
 <main id="main"></main>
 <nav class="tabbar">
   <button data-tab="asta" class="on"><span class="ico">🔨</span>Asta</button>
+  <button data-tab="obiettivi"><span class="ico">🎯</span>Obiettivi</button>
   <button data-tab="rose"><span class="ico">👥</span>Rose</button>
   <button data-tab="fasce"><span class="ico">📊</span>Fasce</button>
   <button data-tab="piano"><span class="ico">⚙️</span>Piano</button>
@@ -144,9 +148,9 @@ const byId = {}; PLAYERS.forEach(p => byId[p.id] = p);
 const KEY = 'astaCopilot_v1';
 let S = load();
 function load(){
-  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.teams) return s; }catch(e){}
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.teams){ s.targets = s.targets || []; return s; } }catch(e){}
   return { teams: Array.from({length:NTEAMS}, (_,i)=> i===0?'Io':'Squadra '+(i+1)),
-           purchases: [], plan: {P:70, D:190, C:320, A:420},
+           purchases: [], targets: [], plan: {P:70, D:190, C:320, A:420},
            tab:'asta', role:'P', sel:null, price:1 };
 }
 let storageOk = true;
@@ -202,6 +206,7 @@ function render(){
   document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab===S.tab));
   const m = $('#main'); m.innerHTML='';
   if(S.tab==='asta') renderAsta(m);
+  else if(S.tab==='obiettivi') renderObiettivi(m);
   else if(S.tab==='rose') renderRose(m);
   else if(S.tab==='fasce') renderFasce(m);
   else renderPiano(m);
@@ -213,7 +218,7 @@ function playerRow(p, withStima){
   const st = withStima && !sold ? stima(p) : null;
   return `<button class="row ${sold?'sold':''}" data-sel="${p.id}">
     <span class="chip chip${p.r}">${p.r}</span>
-    <span><span class="nm">${esc(p.n)}</span><br><span class="tm">${esc(p.sq)}${p.fascia? ' · '+esc(p.fascia):''}</span></span>
+    <span><span class="nm">${S.targets.includes(p.id)?'🎯 ':''}${esc(p.n)}</span><br><span class="tm">${esc(p.sq)}${p.fascia? ' · '+esc(p.fascia):''}</span></span>
     <span class="right num">${sold ? `<b>${sold.price}</b><br><span class="tm">${esc(S.teams[sold.team])}</span>`
         : st ? `<b style="color:var(--accent)">~${st.v}</b><br><span class="tm">fvm ${p.fvm}</span>` : `<span class="tm">fvm ${p.fvm}</span>`}</span>
   </button>`;
@@ -278,7 +283,8 @@ function renderPlayerCard(p){
   const over = rivals.filter(r=>r.max>=st.v).length;
   const frag = h(`<div class="card pcard">
     <div class="head"><span class="chip chip${p.r}">${p.r}</span><span class="n">${esc(p.n)}</span><span class="tm">${esc(p.sq)}</span>
-      ${p.fascia?`<span class="fascia ${MACRO[p.fascia]==='top'?'hot':''}">${esc(p.fascia)}</span>`:'<span class="fascia">fuori guida</span>'}</div>
+      ${p.fascia?`<span class="fascia ${MACRO[p.fascia]==='top'?'hot':''}">${esc(p.fascia)}</span>`:'<span class="fascia">fuori guida</span>'}
+      <button class="tgt ${S.targets.includes(p.id)?'on':''}" data-tgt title="Segna come obiettivo">🎯</button></div>
     <div class="metrics">
       <div class="metric stima"><div class="v num">~${st.v}</div><div class="k">Stima</div></div>
       <div class="metric piano"><div class="v num">${cap}</div><div class="k">Tetto piano</div></div>
@@ -299,6 +305,11 @@ function renderPlayerCard(p){
       <div class="mut" style="margin-top:8px">Tocca la squadra che se lo aggiudica al prezzo impostato.</div>
     </div>`:''}
   </div>`);
+  frag.querySelector('[data-tgt]').addEventListener('click', ()=>{
+    const i = S.targets.indexOf(p.id);
+    if(i>=0) S.targets.splice(i,1); else S.targets.push(p.id);
+    render();
+  });
   const price = frag.querySelector('#price');
   frag.querySelectorAll('[data-d]').forEach(b=>b.addEventListener('click', ()=>{
     price.value = Math.max(1, (+price.value||1) + +b.dataset.d); S.price=+price.value; save();
@@ -312,6 +323,64 @@ function renderPlayerCard(p){
     S.sel=null; S.price=1; render();
   }));
   return frag;
+}
+
+function renderObiettivi(m){
+  const sold = soldMap();
+  const tg = S.targets.map(id=>byId[id]).filter(Boolean)
+    .sort((a,b)=> ROLES.indexOf(a.r)-ROLES.indexOf(b.r) || (norm(a.n)<norm(b.n)?-1:1));
+  if(!tg.length){
+    m.append(h(`<div class="card"><h2>Obiettivi</h2><div class="mut">Nessun obiettivo segnato. Cerca un giocatore nel tab Asta e tocca 🎯 sulla sua scheda per aggiungerlo qui.</div></div>`));
+    return;
+  }
+  const me = teamState(0);
+  const remaining = tg.filter(p=>!sold[p.id]);
+  const sumSt = remaining.reduce((a,p)=>a+stima(p).v,0);
+  const avail = me.credits - Math.max(0, me.slotsLeft - remaining.length);
+  const margin = avail - sumSt;
+  m.append(h(`<div class="card"><h2>Bilancio obiettivi (${remaining.length} rimasti)</h2>
+    <div class="metrics">
+      <div class="metric stima"><div class="v num">${sumSt}</div><div class="k">Stima totale</div></div>
+      <div class="metric piano"><div class="v num">${avail}</div><div class="k">Spendibili</div></div>
+      <div class="metric ${margin>=0?'piano':'abs'}"><div class="v num ${margin>=0?'goodc':'bad'}">${margin>=0?'+':''}${margin}</div><div class="k">Margine</div></div>
+    </div>
+    <div class="${margin>=0?'mut':'warn'}">${margin>=0
+      ? 'Ai prezzi stimati i crediti bastano per tutti gli obiettivi rimasti (tenendo 1 cr per ogni altro slot).'
+      : 'Ai prezzi stimati NON ti bastano i crediti: taglia un obiettivo o preparati a mollarne uno in asta.'}</div>
+  </div>`));
+  const rows = tg.map(p=>{
+    const s2 = sold[p.id];
+    if(s2){
+      const mine = s2.team===0;
+      return `<li style="flex-wrap:wrap"><button class="row ${mine?'':'sold'}" data-sel="${p.id}">
+        <span class="chip chip${p.r}">${p.r}</span>
+        <span><span class="nm">${esc(p.n)}</span><br><span class="tm">${p.fascia?esc(p.fascia):''}</span></span>
+        <span class="right num">${mine
+          ? `<b class="goodc">✓ tuo a ${s2.price}</b>`
+          : `<b class="bad">perso</b><br><span class="tm">${esc(S.teams[s2.team])} · ${s2.price}</span>`}</span>
+      </button></li>`;
+    }
+    const st = stima(p);
+    const rivals = [];
+    for(let i=1;i<NTEAMS;i++){ const ts=teamState(i);
+      if(SLOTS[p.r]-ts.roleCount[p.r] > 0 && ts.slotsLeft>0) rivals.push({i, max:ts.maxBid}); }
+    rivals.sort((a,b)=>b.max-a.max);
+    const canPay = rivals.filter(r=>r.max>=st.v).length;
+    const top = rivals[0];
+    const danger = top
+      ? (top.max >= st.v
+        ? `<span class="warn">⚠️ Pericolo: <b>${esc(S.teams[top.i])}</b> può arrivare a ${top.max} · ${canPay} rival${canPay===1?'e':'i'} in grado di pagare la stima</span>`
+        : `<span class="goodc">Nessun rivale arriva alla stima (il più vicino: ${esc(S.teams[top.i])}, ${top.max})</span>`)
+      : `<span class="goodc">Nessun rivale ha slot liberi nel ruolo</span>`;
+    return `<li style="flex-wrap:wrap"><button class="row" data-sel="${p.id}">
+      <span class="chip chip${p.r}">${p.r}</span>
+      <span><span class="nm">${esc(p.n)}</span><br><span class="tm">${esc(p.sq)}${p.fascia?' · '+esc(p.fascia):''}</span></span>
+      <span class="right num"><b style="color:var(--accent)">~${st.v}</b><br><span class="tm">su ${st.n} acquisti</span></span>
+    </button><div class="mut num" style="width:100%;padding:2px 0 4px 32px">${danger}</div></li>`;
+  }).join('');
+  m.append(h(`<div class="card"><h2>I tuoi obiettivi</h2><ul class="plist">${rows}</ul>
+    <div class="mut" style="margin-top:8px">Tocca un giocatore per aprire la scheda (e da lì togliere il 🎯). Le stime si aggiornano a ogni acquisto registrato.</div></div>`));
+  wireCommon(m);
 }
 
 function renderRose(m){
