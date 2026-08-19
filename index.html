@@ -329,8 +329,25 @@ function renderObiettivi(m){
   const sold = soldMap();
   const tg = S.targets.map(id=>byId[id]).filter(Boolean)
     .sort((a,b)=> ROLES.indexOf(a.r)-ROLES.indexOf(b.r) || (norm(a.n)<norm(b.n)?-1:1));
+  m.append(h(`<div class="searchwrap"><input id="qt" type="search" placeholder="Cerca e tocca per aggiungere un obiettivo…" autocomplete="off" enterkeyhint="search"><div class="results hidden" id="rest"></div></div>`));
+  const qt = m.querySelector('#qt'), rest = m.querySelector('#rest');
+  qt.addEventListener('input', ()=>{
+    const v = norm(qt.value).trim();
+    if(v.length<2){ rest.classList.add('hidden'); return; }
+    const hits = PLAYERS.filter(p => norm(p.n).includes(v) || norm(p.sq).startsWith(v))
+      .sort((a,b)=> (norm(a.n).startsWith(v)?0:1)-(norm(b.n).startsWith(v)?0:1) || b.fvm-a.fvm).slice(0,12);
+    rest.innerHTML = hits.map(p=>playerRow(p,true)).join('') || '<div class="mut" style="padding:10px">Nessun risultato</div>';
+    rest.classList.remove('hidden');
+    rest.querySelectorAll('[data-sel]').forEach(b=>b.addEventListener('click', ()=>{
+      const id = +b.dataset.sel;
+      const i = S.targets.indexOf(id);
+      if(i>=0) S.targets.splice(i,1); else S.targets.push(id);
+      render();
+      const q2 = document.querySelector('#qt'); if(q2) q2.focus();
+    }));
+  });
   if(!tg.length){
-    m.append(h(`<div class="card"><h2>Obiettivi</h2><div class="mut">Nessun obiettivo segnato. Cerca un giocatore nel tab Asta e tocca 🎯 sulla sua scheda per aggiungerlo qui.</div></div>`));
+    m.append(h(`<div class="card"><h2>Obiettivi</h2><div class="mut">Nessun obiettivo segnato. Cerca qui sopra e tocca un giocatore per aggiungerlo (ritoccalo per toglierlo), oppure usa il 🎯 sulla scheda nel tab Asta.</div></div>`));
     return;
   }
   const me = teamState(0);
