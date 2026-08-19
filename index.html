@@ -382,9 +382,9 @@ function renderObiettivi(m){
     <div class="${margin>=0?'mut':'warn'}">${margin>=0
       ? 'Ai prezzi stimati i crediti bastano per tutti gli obiettivi rimasti (tenendo 1 cr per ogni altro slot).'
       : 'Ai prezzi stimati NON ti bastano i crediti: taglia un obiettivo o preparati a mollarne uno in asta.'}</div>
-    <button class="btn" id="shareTg" style="margin-top:10px">📤 Condividi obiettivi col socio</button>
+    <button class="btn sharebtn" style="margin-top:10px">📤 Condividi obiettivi col socio</button>
   </div>`));
-  m.querySelector('#shareTg').addEventListener('click', ()=>{
+  const doShare = ()=>{
     const lines = ['🎯 Obiettivi asta — margine '+(margin>=0?'+':'')+margin+' (stima tot '+sumSt+' / spendibili '+avail+')'];
     [1,2,3].forEach(pr=>{
       const list = tg.filter(p=>prioOf(p.id)===pr);
@@ -401,7 +401,7 @@ function renderObiettivi(m){
     if(navigator.share){ navigator.share({text:txt}).catch(()=>{}); }
     else if(navigator.clipboard){ navigator.clipboard.writeText(txt).then(()=>alert('Lista copiata: incollala su WhatsApp.')).catch(()=>prompt('Copia la lista:', txt)); }
     else prompt('Copia la lista:', txt);
-  });
+  };
   const rowHTML = p => {
     const s2 = sold[p.id];
     const note = S.tnotes[p.id] || '';
@@ -447,7 +447,9 @@ function renderObiettivi(m){
       <ul class="plist">${list.map(rowHTML).join('')}</ul></div>`;
   }).join('');
   m.append(h(`<div class="card"><h2>I tuoi obiettivi</h2>${groups}
-    <div class="mut" style="margin-top:8px">Priorità: 1 = irrinunciabile, 3 = occasione (tocca il numero per cambiarla). 📝 apre la nota, salvata quando esci dal campo. Tocca un giocatore per la scheda.</div></div>`));
+    <div class="mut" style="margin-top:8px">Priorità: 1 = irrinunciabile, 3 = occasione (tocca il numero per cambiarla). 📝 apre la nota, salvata quando esci dal campo. Tocca un giocatore per la scheda.</div>
+    <button class="btn sharebtn" style="margin-top:10px">📤 Condividi obiettivi col socio</button></div>`));
+  m.querySelectorAll('.sharebtn').forEach(b=>b.addEventListener('click', doShare));
   m.querySelectorAll('[data-prio]').forEach(b=>b.addEventListener('click', ()=>{
     const [id,v] = b.dataset.prio.split(':');
     S.tprio[id] = +v; render();
