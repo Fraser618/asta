@@ -69,6 +69,12 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2
 .tgt{margin-left:auto;font-size:24px;opacity:.3;filter:grayscale(1);padding:2px 6px;border-radius:8px}
 .tgt.on{opacity:1;filter:none;background:var(--surface2)}
 .tabbar button{font-size:11px;padding:6px 0}
+.ttools{width:100%;display:flex;gap:8px;align-items:center;padding:4px 0 4px 32px}
+.prioseg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.prioseg button{padding:5px 14px;font-weight:700;font-size:13px;color:var(--ink2);background:var(--surface2)}
+.prioseg button.on{background:var(--accent);color:var(--accent-ink)}
+.notebtn{font-size:13px;color:var(--ink2);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+.tnote{width:calc(100% - 32px);margin:2px 0 8px 32px;font:inherit;font-size:14px;color:var(--ink);background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:44px;resize:vertical}
 .fline{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;border-bottom:1px dashed var(--line)}
 .fline:last-child{border-bottom:none}
 .fslot{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:14px}
@@ -156,9 +162,9 @@ const byId = {}; PLAYERS.forEach(p => byId[p.id] = p);
 const KEY = 'astaCopilot_v1';
 let S = load();
 function load(){
-  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.teams){ s.targets = s.targets || []; return s; } }catch(e){}
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.teams){ s.targets = s.targets || []; s.tnotes = s.tnotes || {}; s.tprio = s.tprio || {}; return s; } }catch(e){}
   return { teams: Array.from({length:NTEAMS}, (_,i)=> i===0?'Io':'Squadra '+(i+1)),
-           purchases: [], targets: [], plan: {P:70, D:190, C:320, A:420},
+           purchases: [], targets: [], tnotes: {}, tprio: {}, plan: {P:70, D:190, C:320, A:420},
            tab:'asta', role:'P', sel:null, price:1 };
 }
 let storageOk = true;
@@ -334,6 +340,9 @@ function renderPlayerCard(p){
   return frag;
 }
 
+const openNotes = new Set();
+const prioOf = id => S.tprio[id] || 2;
+const PRIO = {1:'🥇 Priorità 1 — irrinunciabili', 2:'🥈 Priorità 2 — se il prezzo è giusto', 3:'🥉 Priorità 3 — occasioni'};
 function renderObiettivi(m){
   const sold = soldMap();
   const tg = S.targets.map(id=>byId[id]).filter(Boolean)
@@ -373,9 +382,34 @@ function renderObiettivi(m){
     <div class="${margin>=0?'mut':'warn'}">${margin>=0
       ? 'Ai prezzi stimati i crediti bastano per tutti gli obiettivi rimasti (tenendo 1 cr per ogni altro slot).'
       : 'Ai prezzi stimati NON ti bastano i crediti: taglia un obiettivo o preparati a mollarne uno in asta.'}</div>
+    <button class="btn" id="shareTg" style="margin-top:10px">📤 Condividi obiettivi col socio</button>
   </div>`));
-  const rows = tg.map(p=>{
+  m.querySelector('#shareTg').addEventListener('click', ()=>{
+    const lines = ['🎯 Obiettivi asta — margine '+(margin>=0?'+':'')+margin+' (stima tot '+sumSt+' / spendibili '+avail+')'];
+    [1,2,3].forEach(pr=>{
+      const list = tg.filter(p=>prioOf(p.id)===pr);
+      if(!list.length) return;
+      lines.push('', PRIO[pr]);
+      list.forEach(p=>{
+        const s2 = sold[p.id];
+        const status = s2 ? (s2.team===0 ? '✅ preso a '+s2.price : '❌ perso ('+S.teams[s2.team]+' a '+s2.price+')') : '~'+stima(p).v+' cr';
+        const note = S.tnotes[p.id] ? ' — '+S.tnotes[p.id] : '';
+        lines.push('['+p.r+'] '+p.n+' ('+p.sq+') '+status+note);
+      });
+    });
+    const txt = lines.join('\n');
+    if(navigator.share){ navigator.share({text:txt}).catch(()=>{}); }
+    else if(navigator.clipboard){ navigator.clipboard.writeText(txt).then(()=>alert('Lista copiata: incollala su WhatsApp.')).catch(()=>prompt('Copia la lista:', txt)); }
+    else prompt('Copia la lista:', txt);
+  });
+  const rowHTML = p => {
     const s2 = sold[p.id];
+    const note = S.tnotes[p.id] || '';
+    const noteOpen = note || openNotes.has(p.id);
+    const tools = `<div class="ttools">
+      ${!s2 ? `<span class="prioseg">${[1,2,3].map(v=>`<button data-prio="${p.id}:${v}" class="${prioOf(p.id)===v?'on':''}">${v}</button>`).join('')}</span>` : ''}
+      <button class="notebtn" data-note="${p.id}">📝 ${note?'nota':'aggiungi nota'}</button>
+    </div><textarea class="tnote ${noteOpen?'':'hidden'}" data-tnote="${p.id}" placeholder="Nota per il socio…">${esc(note)}</textarea>`;
     if(s2){
       const mine = s2.team===0;
       return `<li style="flex-wrap:wrap"><button class="row ${mine?'':'sold'}" data-sel="${p.id}">
@@ -384,7 +418,7 @@ function renderObiettivi(m){
         <span class="right num">${mine
           ? `<b class="goodc">✓ tuo a ${s2.price}</b>`
           : `<b class="bad">perso</b><br><span class="tm">${esc(S.teams[s2.team])} · ${s2.price}</span>`}</span>
-      </button></li>`;
+      </button>${tools}</li>`;
     }
     const st = stima(p);
     const rivals = [];
@@ -402,10 +436,35 @@ function renderObiettivi(m){
       <span class="chip chip${p.r}">${p.r}</span>
       <span><span class="nm">${esc(p.n)}</span><br><span class="tm">${esc(p.sq)}${p.fascia?' · '+esc(p.fascia):''}</span></span>
       <span class="right num"><b style="color:var(--accent)">~${st.v}</b><br><span class="tm">su ${st.n} acquisti</span></span>
-    </button><div class="mut num" style="width:100%;padding:2px 0 4px 32px">${danger}</div></li>`;
+    </button><div class="mut num" style="width:100%;padding:2px 0 0 32px">${danger}</div>${tools}</li>`;
+  };
+  const groups = [1,2,3].map(pr=>{
+    const list = tg.filter(p=>prioOf(p.id)===pr);
+    if(!list.length) return '';
+    const rem = list.filter(p=>!sold[p.id]);
+    const sub = rem.reduce((a,p)=>a+stima(p).v,0);
+    return `<div class="tiergrp"><h3>${PRIO[pr]} <span class="mut num">· ${rem.length} rimasti · stima ${sub}</span></h3>
+      <ul class="plist">${list.map(rowHTML).join('')}</ul></div>`;
   }).join('');
-  m.append(h(`<div class="card"><h2>I tuoi obiettivi</h2><ul class="plist">${rows}</ul>
-    <div class="mut" style="margin-top:8px">Tocca un giocatore per aprire la scheda (e da lì togliere il 🎯). Le stime si aggiornano a ogni acquisto registrato.</div></div>`));
+  m.append(h(`<div class="card"><h2>I tuoi obiettivi</h2>${groups}
+    <div class="mut" style="margin-top:8px">Priorità: 1 = irrinunciabile, 3 = occasione (tocca il numero per cambiarla). 📝 apre la nota, salvata quando esci dal campo. Tocca un giocatore per la scheda.</div></div>`));
+  m.querySelectorAll('[data-prio]').forEach(b=>b.addEventListener('click', ()=>{
+    const [id,v] = b.dataset.prio.split(':');
+    S.tprio[id] = +v; render();
+  }));
+  m.querySelectorAll('[data-note]').forEach(b=>b.addEventListener('click', ()=>{
+    const id = +b.dataset.note;
+    const ta = m.querySelector(`textarea[data-tnote="${id}"]`);
+    if(ta.classList.contains('hidden')){ openNotes.add(id); ta.classList.remove('hidden'); ta.focus(); }
+    else if(!ta.value.trim()){ openNotes.delete(id); ta.classList.add('hidden'); }
+    else ta.focus();
+  }));
+  m.querySelectorAll('[data-tnote]').forEach(ta=>ta.addEventListener('change', ()=>{
+    const id = +ta.dataset.tnote;
+    const v = ta.value.trim();
+    if(v) S.tnotes[id]=v; else delete S.tnotes[id];
+    save();
+  }));
   wireCommon(m);
 }
 
